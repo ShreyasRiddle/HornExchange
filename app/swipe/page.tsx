@@ -30,6 +30,9 @@ type DragState = { x: number; y: number; active: boolean };
 type ExitState = "left" | "right" | null;
 const previewCardCount = 3;
 const swipeExitMs = 460;
+const topExitMs = 460;
+const stackRiseMs = 360;
+const stackRiseDelayMs = 90;
 const stackFrames = [
   { y: 0, x: 0, rotate: 0, scale: 1, opacity: 1, blur: 0 },
   { y: 28, x: 0, rotate: 0, scale: 1, opacity: 1, blur: 0 },
@@ -37,6 +40,14 @@ const stackFrames = [
   { y: 84, x: 0, rotate: 0, scale: 1, opacity: 1, blur: 0 },
   { y: 112, x: 0, rotate: 0, scale: 1, opacity: 0, blur: 0 },
 ] as const;
+
+function getStackBorderColor(layer: number) {
+  if (layer <= 0) return "rgba(113, 113, 122, 0.44)";
+  if (layer === 1) return "rgba(82, 82, 91, 0.42)";
+  if (layer === 2) return "rgba(63, 63, 70, 0.4)";
+  if (layer === 3) return "rgba(63, 63, 70, 0.36)";
+  return "rgba(39, 39, 42, 0.34)";
+}
 
 const baseSwipeExamples = [
   "Cheap haircut near West Campus tonight",
@@ -260,6 +271,7 @@ export default function SwipePage() {
   const animateAdvance = (direction: ExitState, save: boolean) => {
     const currentCard = activeCardRef.current;
     if (!currentCard) return;
+    setDrag((current) => ({ ...current, active: false }));
     setExit(direction);
     if (save) {
       setSaved((current) =>
@@ -272,6 +284,7 @@ export default function SwipePage() {
       setDeckIndex((current) => current + 1);
       setExit(null);
       setExpanded(false);
+      setDrag({ x: 0, y: 0, active: false });
     }, swipeExitMs);
   };
 
@@ -315,9 +328,15 @@ export default function SwipePage() {
   const endDrag = () => {
     const deltaX = drag.x;
     dragStart.current = null;
+    if (deltaX >= 92) {
+      animateAdvance("right", true);
+      return;
+    }
+    if (deltaX <= -92) {
+      animateAdvance("left", false);
+      return;
+    }
     setDrag({ x: 0, y: 0, active: false });
-    if (deltaX >= 92) animateAdvance("right", true);
-    if (deltaX <= -92) animateAdvance("left", false);
   };
 
   const runPromptRefine = (event: FormEvent) => {
@@ -346,15 +365,15 @@ export default function SwipePage() {
       }
     : exit === "left"
       ? {
-          transform: "translateX(-132%) rotate(-6deg)",
+          transform: `translateX(calc(${drag.x}px - 100vw - 260px))`,
           opacity: 1,
-          transition: `transform ${swipeExitMs}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+          transition: `transform ${topExitMs}ms cubic-bezier(0.22, 1, 0.36, 1)`,
         }
       : exit === "right"
         ? {
-            transform: "translateX(132%) rotate(6deg)",
+            transform: `translateX(calc(${drag.x}px + 100vw + 260px))`,
             opacity: 1,
-            transition: `transform ${swipeExitMs}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+            transition: `transform ${topExitMs}ms cubic-bezier(0.22, 1, 0.36, 1)`,
           }
         : {
             transform: "translate3d(0, 0, 0) rotate(0deg)",
@@ -472,6 +491,7 @@ export default function SwipePage() {
         {activeCard && (
           <div className="relative">
             <article
+              key={activeCard.id}
               className="relative z-30 min-h-[16.5rem] rounded-[2rem] border border-zinc-700 bg-gradient-to-b from-zinc-900 to-black p-5 text-zinc-100 shadow-[0_35px_90px_rgba(0,0,0,0.55)] transition-all duration-200 sm:min-h-[17rem] sm:p-6"
               style={cardStyle}
               onPointerDown={startDrag}
@@ -507,19 +527,21 @@ export default function SwipePage() {
 
             {stackedCards.map((stackCard, index) => {
               const layer = index + 1;
-              const targetLayer = exit ? Math.max(1, layer - 1) : layer;
+              const targetLayer = exit ? Math.max(0, layer - 1) : layer;
               const frame = stackFrames[Math.max(0, Math.min(targetLayer, stackFrames.length - 1))];
+              const borderColor = getStackBorderColor(targetLayer);
               return (
                 <article
                   key={`${stackCard.id}-stack-${layer}`}
-                  className="pointer-events-none absolute inset-0 min-h-[16.5rem] rounded-[2rem] border border-zinc-800 bg-gradient-to-b from-zinc-900/95 to-black/90 p-5 text-zinc-100 shadow-[0_24px_55px_rgba(0,0,0,0.4)] sm:min-h-[17rem] sm:p-6"
+                  className="pointer-events-none absolute inset-0 min-h-[16.5rem] rounded-[2rem] border border-transparent bg-gradient-to-b from-zinc-900/95 to-black/90 p-5 text-zinc-100 shadow-[0_24px_55px_rgba(0,0,0,0.4)] sm:min-h-[17rem] sm:p-6"
                   style={{
                     transform: `translate(${frame.x}px, ${frame.y}px) rotate(${frame.rotate}deg) scale(${frame.scale})`,
                     opacity: frame.opacity,
                     filter: `blur(${frame.blur}px)`,
+                    borderColor,
                     zIndex: 18 - targetLayer,
                     transition:
-                      `transform ${swipeExitMs}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${swipeExitMs}ms ease, filter ${swipeExitMs}ms ease`,
+                      `transform ${stackRiseMs}ms cubic-bezier(0.22, 1, 0.36, 1) ${exit ? stackRiseDelayMs : 0}ms, opacity ${stackRiseMs}ms ease ${exit ? stackRiseDelayMs : 0}ms, filter ${stackRiseMs}ms ease ${exit ? stackRiseDelayMs : 0}ms, border-color ${stackRiseMs + 140}ms cubic-bezier(0.16, 1, 0.3, 1) ${exit ? stackRiseDelayMs + 50 : 0}ms`,
                   }}
                 >
                   <header className="flex items-start justify-between gap-3">
@@ -543,18 +565,25 @@ export default function SwipePage() {
               );
             })}
             {trailingStackCard && (
+              (() => {
+                const trailingLayer = exit ? 3 : 4;
+                const trailingBorderColor = getStackBorderColor(trailingLayer);
+                return (
               <article
                 key={`${trailingStackCard.id}-stack-trailing`}
-                className="pointer-events-none absolute inset-0 min-h-[16.5rem] rounded-[2rem] border border-zinc-800 bg-gradient-to-b from-zinc-900/95 to-black/90 p-5 text-zinc-100 shadow-[0_24px_55px_rgba(0,0,0,0.4)] sm:min-h-[17rem] sm:p-6"
+                className="pointer-events-none absolute inset-0 min-h-[16.5rem] rounded-[2rem] border border-transparent bg-gradient-to-b from-zinc-900/95 to-black/90 p-5 text-zinc-100 shadow-[0_24px_55px_rgba(0,0,0,0.4)] sm:min-h-[17rem] sm:p-6"
                 style={{
                   transform: `translate(${(exit ? stackFrames[3] : stackFrames[4]).x}px, ${(exit ? stackFrames[3] : stackFrames[4]).y}px) rotate(${(exit ? stackFrames[3] : stackFrames[4]).rotate}deg) scale(${(exit ? stackFrames[3] : stackFrames[4]).scale})`,
                   opacity: (exit ? stackFrames[3] : stackFrames[4]).opacity,
                   filter: `blur(${(exit ? stackFrames[3] : stackFrames[4]).blur}px)`,
+                  borderColor: trailingBorderColor,
                   zIndex: 14,
                   transition:
-                    `transform ${swipeExitMs}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${swipeExitMs}ms ease, filter ${swipeExitMs}ms ease`,
+                    `transform ${stackRiseMs}ms cubic-bezier(0.22, 1, 0.36, 1) ${exit ? stackRiseDelayMs : 0}ms, opacity ${stackRiseMs}ms ease ${exit ? stackRiseDelayMs : 0}ms, filter ${stackRiseMs}ms ease ${exit ? stackRiseDelayMs : 0}ms, border-color ${stackRiseMs + 140}ms cubic-bezier(0.16, 1, 0.3, 1) ${exit ? stackRiseDelayMs + 50 : 0}ms`,
                 }}
               />
+                );
+              })()
             )}
           </div>
         )}

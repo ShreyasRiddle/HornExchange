@@ -345,38 +345,54 @@ const providerFirstNameBases = [
 
 const providerFirstNameCompounds = ["Rose", "Lee", "Mae", "Kai", "Noel", "Jude"];
 
-const titlePatterns: Record<ServiceListing["category"], { prefix: string[]; suffix: string[] }> = {
+const titlePatterns: Record<ServiceListing["category"], { lead: string[]; focus: string[]; tail: string[] }> = {
   Haircuts: {
-    prefix: ["Campus", "Precision", "Game-Day", "Quick", "Evening", "Classic"],
-    suffix: ["Fade Studio", "Lineup Session", "Taper Cut", "Trim Appointment", "Barber Service"],
+    lead: ["Campus", "Studio", "West End", "Quick", "Game-Day", "Evening", "Precision", "Classic"],
+    focus: ["Fade", "Taper", "Lineup", "Textured Crop", "Clean-Up", "Clipper", "Low Fade", "Burst Fade"],
+    tail: ["Session", "Service", "Cut Slot", "Barber Hour", "Appointment", "Refresh", "Touch-Up", "Package"],
   },
   Braiding: {
-    prefix: ["Formal", "Protective", "Signature", "Weekend", "Event", "Natural"],
-    suffix: ["Braid Styling", "Twist Refresh", "Knotless Setup", "Detail Session", "Braids Appointment"],
+    lead: ["Protective", "Formal", "Weekend", "Signature", "Natural", "Detail", "Event", "Campus"],
+    focus: ["Braids", "Twists", "Knotless Set", "Cornrow Set", "Retwist", "Style Refresh", "Boho Braids", "Braid Prep"],
+    tail: ["Appointment", "Session", "Setup", "Styling Slot", "Look Build", "Service", "Package", "Flow"],
   },
   Tutoring: {
-    prefix: ["Exam", "Concept", "Rapid", "Office-Hours", "Problem-Solving", "Midterm"],
-    suffix: ["Calc Coaching", "Physics Review", "STEM Prep", "Homework Lab", "Tutoring Session"],
+    lead: ["Exam", "Midterm", "Concept", "Rapid", "Office-Hours", "Problem-Solving", "Course", "Study"],
+    focus: ["Calc", "Physics", "STEM", "Homework", "Quiz", "Assignment", "Test Prep", "Coursework"],
+    tail: ["Lab", "Coaching", "Session", "Review Block", "Sprint", "Deep Dive", "Boost", "Prep Hour"],
   },
   Photography: {
-    prefix: ["Portrait", "Sunset", "Editorial", "Grad", "Org", "LinkedIn"],
-    suffix: ["Photo Session", "Headshot Shoot", "Campus Portraits", "Branding Shoot", "Photo Package"],
+    lead: ["Portrait", "Sunset", "Editorial", "Grad", "Org", "LinkedIn", "Campus", "Golden-Hour"],
+    focus: ["Headshot", "Photo", "Portrait", "Branding", "Event", "Content", "Graduation", "Lifestyle"],
+    tail: ["Shoot", "Session", "Package", "Set", "Capture", "Mini", "Coverage", "Edit Bundle"],
   },
   "Resume Review": {
-    prefix: ["Recruiting", "Interview", "Internship", "Career-Fair", "Application", "Consulting"],
-    suffix: ["Resume Review", "Bullet Rewrite", "Resume Tune-Up", "ATS Cleanup", "Resume Session"],
+    lead: ["Recruiting", "Internship", "Career-Fair", "Consulting", "Application", "Interview", "Offer-Ready", "ATS"],
+    focus: ["Resume", "Bullet", "CV", "Profile", "Cover Letter", "ATS", "Job App", "Experience Section"],
+    tail: ["Tune-Up", "Rewrite", "Review", "Cleanup", "Sprint", "Session", "Polish", "Pass"],
   },
   "Moving Help": {
-    prefix: ["Move-Out", "Weekend", "Heavy-Lift", "Apartment", "Storage", "Fast"],
-    suffix: ["Moving Crew", "Truck Assist", "Move Support", "Furniture Haul", "Relocation Help"],
+    lead: ["Move-Out", "Weekend", "Apartment", "Storage", "Heavy-Lift", "Truck", "Lease-End", "Campus"],
+    focus: ["Moving", "Haul", "Furniture", "Load-In", "Pickup", "Relocation", "Box Run", "Carry"],
+    tail: ["Crew", "Assist", "Run", "Support", "Service", "Shift", "Session", "Block"],
   },
 };
 
-function buildServiceTitle(base: ServiceListing, iteration: number) {
+function buildServiceTitle(base: ServiceListing, iteration: number, baseIndex: number) {
   const pattern = titlePatterns[base.category];
-  const prefix = pattern.prefix[iteration % pattern.prefix.length];
-  const suffix = pattern.suffix[Math.floor(iteration / pattern.prefix.length) % pattern.suffix.length];
-  return `${prefix} ${suffix}`;
+  const code = iteration + baseIndex * 97;
+  const lead = pattern.lead[code % pattern.lead.length];
+  const focus = pattern.focus[Math.floor(code / pattern.lead.length) % pattern.focus.length];
+  const tail =
+    pattern.tail[
+      Math.floor(code / (pattern.lead.length * pattern.focus.length)) % pattern.tail.length
+    ];
+  const style = (iteration + baseIndex) % 4;
+
+  if (style === 0) return `${lead} ${focus} ${tail}`;
+  if (style === 1) return `${focus} by ${lead}`;
+  if (style === 2) return `${lead}: ${focus}`;
+  return `${lead} ${focus} Collective`;
 }
 
 function buildProviderFirstName(globalIndex: number) {
@@ -401,7 +417,7 @@ function cloneListing(base: ServiceListing, iteration: number, baseIndex: number
     ...base,
     id: `${base.id}-${iteration}`,
     providerName: `${firstName} ${providerSurnames[surnameIndex]}`,
-    serviceTitle: buildServiceTitle(base, iteration),
+    serviceTitle: buildServiceTitle(base, iteration, baseIndex),
     neighborhood,
     price: Math.max(10, base.price + priceDelta),
     trustScore: Math.max(78, Math.min(99, base.trustScore + trustDelta)),
