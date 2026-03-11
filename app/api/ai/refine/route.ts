@@ -1,23 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AiErrorResponse,
+  AiRefineRequest,
+  AiRefineResponse,
+  isNonEmptyString,
+  isSearchPreference,
+} from "@/lib/api-contracts";
 import { refineRecommendations, searchMarketplace } from "@/lib/search";
-import { SearchPreference } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
-  const { query, preference } = (await request.json()) as {
-    query?: string;
-    preference?: SearchPreference;
-  };
+  const body = (await request.json()) as Partial<AiRefineRequest>;
+  const { query, preference } = body;
 
-  if (!query?.trim() || !preference) {
+  if (!isNonEmptyString(query) || !isSearchPreference(preference)) {
     return NextResponse.json(
-      { error: "Both the original search query and a refinement are required." },
+      { error: "A valid query and refinement preference are required." } satisfies AiErrorResponse,
       { status: 400 },
     );
   }
 
   const result = searchMarketplace(query);
 
-  return NextResponse.json({
+  return NextResponse.json<AiRefineResponse>({
     ...result,
     recommendations: refineRecommendations(result.recommendations, preference),
   });

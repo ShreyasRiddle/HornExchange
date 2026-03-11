@@ -26,6 +26,11 @@ App URL: `http://localhost:3000`
 - `POST /api/ai/generate-listing` -> seller listing draft assist
 - `POST /api/ai/message-assist` -> buyer opener and seller reply suggestions
 
+Contract docs:
+
+- `docs/contracts/ai-api-contracts.md`
+- `docs/contracts/ut-verification.md`
+
 ## Multi-agent workflow (Codex)
 
 One-command worktree setup:
