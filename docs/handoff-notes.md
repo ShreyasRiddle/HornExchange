@@ -29,3 +29,17 @@ Template:
   - Non-UT profiles may exist only in unverified onboarding states; marketplace-active identities remain UT-verified.
 - Blockers:
   - None.
+
+## [codex-agent-ui] 2026-03-10 22:02 CDT
+- Completed:
+  - Rebuilt `components/hornexchange-app.tsx` into a mobile-first two-screen UX: prompt-first Search screen and separate Chats screen.
+  - Implemented Tinder-style swipe deck interactions with gesture semantics: left=skip, right=save, up=expand details.
+  - Added dedicated route `app/chats/page.tsx` so Chats is accessible as a separate page while preserving in-app screen navigation.
+  - Added localStorage persistence for saved profiles, booking slot picks, DM threads, and active chat selection to keep demo flow stable across page changes.
+- Contracts touched:
+  - None. No changes to `app/api/ai/*`, `lib/search.ts`, or `lib/types.ts` payload structures.
+- Assumptions:
+  - "Separate Chats page" is satisfied by both dedicated route (`/chats`) and in-app tab navigation for quick mobile demo switching.
+  - Persisting shortlist/threads in localStorage is acceptable for demo-safe continuity without backend schema changes.
+- Blockers:
+  - None.
