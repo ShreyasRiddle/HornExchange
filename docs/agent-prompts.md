@@ -1,4 +1,7 @@
-# Agent Prompts (Paste into each Codex session)
+# Agent Prompts (Legacy Stream Prompts)
+
+Use `docs/master-prompt-device1.md` and `docs/master-prompt-device2.md` as the primary source.
+This file is kept as short per-stream fallback context.
 
 ## UI stream (`worktrees/ui`)
 

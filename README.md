@@ -46,6 +46,17 @@ Open one Codex session per worktree and assign ownership by stream.
 
 Detailed instructions: `docs/agentic-workflow.md`
 
+Device-specific master prompts:
+
+- Device 1 (Shreyas): `docs/master-prompt-device1.md`
+- Device 2 (Dhruv): `docs/master-prompt-device2.md`
+
+Orchestrator merge command:
+
+```bash
+bash scripts/merge-train.sh
+```
+
 ## Custom skill
 
 Project skill: `skills/hornexchange-builder/SKILL.md`
