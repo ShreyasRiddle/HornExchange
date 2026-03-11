@@ -9,53 +9,100 @@ const categoryRules: Array<{ category: ServiceCategory; match: RegExp }> = [
   { category: "Moving Help", match: /move|truck|furniture|storage/i },
 ];
 
+function inferTitle(category: ServiceCategory, lower: string) {
+  const isFast = /fast|quick|same day|asap|tonight/.test(lower);
+  const locationTag = lower.includes("west campus")
+    ? "West Campus"
+    : lower.includes("north campus")
+      ? "North Campus"
+      : "UT";
+
+  if (category === "Haircuts") {
+    return `${locationTag} Student Fades and Clean Cuts`;
+  }
+  if (category === "Braiding") {
+    return isFast
+      ? `${locationTag} Event Braids With Fast Turnaround`
+      : `${locationTag} Event-Ready Braids for Students`;
+  }
+  if (category === "Tutoring") {
+    return isFast
+      ? `${locationTag} Last-Minute Tutoring Sessions`
+      : `${locationTag} Tutoring for Exam Week`;
+  }
+  if (category === "Photography") {
+    return `${locationTag} Headshots and Grad Portrait Sessions`;
+  }
+  if (category === "Resume Review") {
+    return `${locationTag} Resume Review Before Recruiting`;
+  }
+  return `${locationTag} Move-Out and Haul Help`;
+}
+
+function buildDescription(normalized: string, category: ServiceCategory, lower: string) {
+  const buyerNeed =
+    category === "Tutoring"
+      ? "unstick a class fast before a quiz or exam"
+      : category === "Resume Review"
+        ? "ship stronger applications before deadlines"
+        : category === "Moving Help"
+          ? "handle move-out without last-minute stress"
+          : category === "Photography"
+            ? "get polished photos for orgs, recruiting, and grad"
+            : category === "Braiding"
+              ? "lock in a reliable style before events"
+              : "book a clean cut near campus without a long wait";
+
+  const trustCue = /review|trusted|reliable|experienced/.test(lower)
+    ? "You already signal trust, so keep that line near the top of your listing."
+    : "Add one trust line (years of experience, repeat clients, or review count) to improve conversion.";
+
+  return `From your notes: ${normalized}. Reframed for UT buyers: clearly state what you do, who it helps, and your expected turnaround so students can decide quickly. This listing should help someone ${buyerNeed}. ${trustCue}`;
+}
+
 export function generateListingDraft(input: string): ListingAssistResponse {
   const trimmed = input.trim();
-  const category =
-    categoryRules.find(({ match }) => match.test(trimmed))?.category ?? "Tutoring";
   const normalized = trimmed.replace(/\s+/g, " ");
   const lower = normalized.toLowerCase();
-  const title =
-    category === "Haircuts"
-      ? "UT Student Haircuts Near West Campus"
-      : category === "Braiding"
-        ? "Event-Ready Braids for UT Students"
-        : category === "Tutoring"
-          ? "Quick-Response UT Tutoring Sessions"
-          : category === "Photography"
-            ? "Campus Portraits and Headshots"
-            : category === "Resume Review"
-              ? "Resume Rescue Before Recruiting"
-              : "Campus Move-Out and Haul Help";
+  const category =
+    categoryRules.find(({ match }) => match.test(normalized))?.category ?? "Tutoring";
 
-  const description = `Built from your rough notes: ${normalized}. This listing now reads like a clear student service for UT buyers, with what you offer, who it is for, and why someone should trust you.`;
-
-  const availabilityHint = lower.includes("tonight")
-    ? "Highlight tonight availability to convert faster."
-    : lower.includes("weekend")
-      ? "Call out your weekend slots early in the card."
-      : "Add one or two specific time windows to improve booking confidence.";
+  const hasPrice = /\$\d+|\b\d+\s?(usd|dollars?)\b/i.test(normalized);
+  const hasCampusLocation = /(west campus|north campus|guadalupe|riverside|downtown)/i.test(
+    normalized,
+  );
+  const hasTiming = /(tonight|tomorrow|this week|weekend|same day|asap)/i.test(normalized);
 
   const tags = [
     category.toLowerCase(),
-    lower.includes("west campus") ? "west campus" : "ut students",
-    lower.includes("cheap") || lower.includes("$20") ? "budget-friendly" : "trusted",
-    "fast replies",
+    lower.includes("west campus")
+      ? "west campus"
+      : lower.includes("north campus")
+        ? "north campus"
+        : "ut students",
+    hasPrice ? "transparent pricing" : "price on request",
+    /(same day|tonight|quick|fast|asap)/i.test(normalized) ? "fast replies" : "reliable scheduling",
   ];
 
+  const availabilityHint = lower.includes("tonight")
+    ? "Lead with tonight slots and one exact time window to increase replies."
+    : lower.includes("weekend")
+      ? "Put weekend availability in your first sentence so planners commit sooner."
+      : "Include at least two concrete time windows (for example: Tue evening, Sat morning).";
+
   const improvementNotes = [
-    lower.match(/\$\d+/) ? "Pricing is clear enough for browsing." : "Add a clear price or price range.",
-    lower.includes("west campus") || lower.includes("north campus")
-      ? "Location feels campus-specific."
-      : "Add a campus neighborhood like West Campus or North Campus.",
-    lower.includes("tonight") || lower.includes("weekend") || lower.includes("tomorrow")
-      ? "Availability is concrete."
-      : "Add timing language so buyers know when you can help.",
+    hasPrice ? "Pricing is clear enough for comparison." : "Add a clear price or price range students can scan.",
+    hasCampusLocation
+      ? "Location is campus-specific and easy to trust."
+      : "Add a neighborhood (West Campus, North Campus, Guadalupe, or Riverside).",
+    hasTiming
+      ? "Availability language is concrete and bookable."
+      : "Add timing words like tonight, tomorrow, or weekends to reduce back-and-forth.",
   ];
 
   return {
-    title,
-    description,
+    title: inferTitle(category, lower),
+    description: buildDescription(normalized, category, lower),
     category,
     tags,
     availabilityHint,

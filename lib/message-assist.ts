@@ -1,18 +1,25 @@
 import { MessageAssistResponse, ServiceListing } from "@/lib/types";
 
+function firstName(fullName: string) {
+  return fullName.split(" ")[0] ?? "there";
+}
+
 export function buildMessageAssist(
   listing: ServiceListing,
 ): MessageAssistResponse {
+  const provider = firstName(listing.providerName);
+  const primarySlot = listing.schedule[0] ?? "a time this week";
+
   return {
     buyerOpeners: [
-      `Hey ${listing.providerName.split(" ")[0]}! I found your ${listing.category.toLowerCase()} listing and I’m interested in ${listing.schedule[0].toLowerCase()}. Is that still open?`,
-      `Hi! I’m looking for ${listing.category.toLowerCase()} near ${listing.neighborhood}. Your profile feels like the best fit. Could we talk timing?`,
-      `Hey, I like your reviews and trust score. What should I know before booking your ${listing.serviceTitle.toLowerCase()} service?`,
+      `Hey ${provider}, I’m a UT student and your ${listing.category.toLowerCase()} listing looks like a fit. Is ${primarySlot.toLowerCase()} still open?`,
+      `Hi ${provider}! I’m near ${listing.neighborhood} and want to book your ${listing.serviceTitle.toLowerCase()}. Could you confirm pricing and the soonest slot?`,
+      `Hey, your trust score and reviews stood out to me. If I share what I need, can you suggest the best appointment option?`,
     ],
     sellerReplies: [
-      `Yep, ${listing.schedule[0]} is still open. If that works for you, I can lock it in.`,
-      `Absolutely. Most students book me for a quick turnaround, so I can send over the details and what to bring.`,
-      `Happy to help. Tell me your preferred time and I’ll suggest the smoothest option on my schedule.`,
+      `Yes, ${primarySlot} is open. If you want it, I can hold it and share exact next steps.`,
+      `Happy to help. Share your timing and what outcome you want, and I’ll recommend the smoothest option on my schedule.`,
+      `Absolutely. Once you confirm your preferred slot, I’ll send location details and prep notes so booking is easy.`,
     ],
   };
 }

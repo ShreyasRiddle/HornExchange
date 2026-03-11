@@ -16,20 +16,41 @@ const categoryKeywords: Record<ServiceCategory, string[]> = {
   "Moving Help": ["move", "moving", "truck", "furniture", "pickup"],
 };
 
-const neighborhoodKeywords = [
-  "West Campus",
-  "North Campus",
-  "Guadalupe",
-  "Riverside",
-  "Downtown Austin",
+const neighborhoodAliases = [
+  { canonical: "West Campus", keywords: ["west campus", "wc"] },
+  { canonical: "North Campus", keywords: ["north campus", "hyde park"] },
+  { canonical: "Guadalupe", keywords: ["guadalupe", "the drag", "drag"] },
+  { canonical: "Riverside", keywords: ["riverside", "east riverside"] },
+  { canonical: "Downtown Austin", keywords: ["downtown", "downtown austin"] },
 ] as const;
 
 const timingMap = [
   { key: "tonight", value: "Tonight" as const },
+  { key: "today", value: "Tonight" as const },
+  { key: "asap", value: "Tonight" as const },
   { key: "tomorrow", value: "Tomorrow" as const },
+  { key: "this weekend", value: "Weekends" as const },
   { key: "weekend", value: "Weekends" as const },
   { key: "this week", value: "This Week" as const },
 ];
+
+const rankWeights = {
+  category: 40,
+  location: 20,
+  price: 15,
+  timing: 15,
+  trustRating: 10,
+} as const;
+
+type ScoreBreakdown = {
+  category: number;
+  location: number;
+  price: number;
+  timing: number;
+  trustRating: number;
+  qualityBonus: number;
+  vibeBonus: number;
+};
 
 function parseCategory(query: string) {
   const lowered = query.toLowerCase();
@@ -45,19 +66,61 @@ function parseCategory(query: string) {
   return "General" as const;
 }
 
+function parseBudget(lowered: string) {
+  const explicitMoney =
+    lowered.match(/\$(\d{1,3})/) ??
+    lowered.match(/\bunder\s+(\d{1,3})\b/) ??
+    lowered.match(/\bwithin\s+(\d{1,3})\b/) ??
+    lowered.match(/\bmax(?:imum)?\s+(\d{1,3})\b/) ??
+    lowered.match(/\bbudget\s+(\d{1,3})\b/);
+  return explicitMoney ? Number(explicitMoney[1]) : undefined;
+}
+
+function parseLocation(lowered: string) {
+  const found = neighborhoodAliases.find(({ keywords }) =>
+    keywords.some((keyword) => lowered.includes(keyword)),
+  );
+  return found?.canonical;
+}
+
+function scheduleMinutes(schedule: string[]) {
+  const parsed = schedule
+    .map((slot) => {
+      const match = slot.match(/\b(\d{1,2}):(\d{2})\s*(AM|PM)\b/i);
+      if (!match) return Number.POSITIVE_INFINITY;
+      const hours12 = Number(match[1]) % 12;
+      const hours24 = match[3].toUpperCase() === "PM" ? hours12 + 12 : hours12;
+      return hours24 * 60 + Number(match[2]);
+    })
+    .sort((a, b) => a - b);
+  return parsed[0] ?? Number.POSITIVE_INFINITY;
+}
+
+function responseTimeMinutes(responseTime: string) {
+  const match = responseTime.match(/(\d+)\s*min/i);
+  return match ? Number(match[1]) : 30;
+}
+
 export function inferIntent(query: string): SearchIntent {
   const lowered = query.toLowerCase();
-  const budgetMatch = lowered.match(/\$(\d+)/) ?? lowered.match(/under (\d+)/);
+  const maxPrice = parseBudget(lowered);
   const category = parseCategory(query);
-  const location = neighborhoodKeywords.find((spot) =>
-    lowered.includes(spot.toLowerCase()),
-  );
+  const location = parseLocation(lowered);
   const timing = timingMap.find(({ key }) => lowered.includes(key))?.value;
-  const qualityFocus = lowered.includes("cheap")
-    ? "Budget"
-    : lowered.includes("trusted") || lowered.includes("best")
+  const qualityFocus =
+    lowered.includes("cheap") ||
+    lowered.includes("affordable") ||
+    lowered.includes("budget")
+      ? "Budget"
+      : lowered.includes("trusted") ||
+          lowered.includes("best") ||
+          lowered.includes("reviews") ||
+          lowered.includes("reliable")
       ? "Trust"
-      : lowered.includes("fast") || lowered.includes("soon")
+      : lowered.includes("fast") ||
+          lowered.includes("soon") ||
+          lowered.includes("quick") ||
+          lowered.includes("asap")
         ? "Speed"
         : undefined;
   const vibe = lowered.includes("premium")
@@ -69,7 +132,7 @@ export function inferIntent(query: string): SearchIntent {
         : undefined;
   const chips = [
     category !== "General" ? category : "Concierge search",
-    budgetMatch ? `Under $${budgetMatch[1]}` : undefined,
+    maxPrice ? `Under $${maxPrice}` : undefined,
     location,
     timing,
     qualityFocus === "Budget"
@@ -84,7 +147,7 @@ export function inferIntent(query: string): SearchIntent {
   return {
     rawQuery: query,
     category,
-    maxPrice: budgetMatch ? Number(budgetMatch[1]) : undefined,
+    maxPrice,
     location,
     timing,
     qualityFocus,
@@ -93,84 +156,124 @@ export function inferIntent(query: string): SearchIntent {
   };
 }
 
-function scoreListing(intent: SearchIntent, listing: RankedRecommendation) {
-  let score = 45;
+function scoreListing(
+  intent: SearchIntent,
+  listing: RankedRecommendation,
+): { score: number; factors: ScoreBreakdown } {
+  const category =
+    intent.category === "General"
+      ? rankWeights.category * 0.35
+      : intent.category === listing.category
+        ? rankWeights.category
+        : 0;
+  const location =
+    intent.location === undefined
+      ? rankWeights.location * 0.4
+      : intent.location === listing.neighborhood
+        ? rankWeights.location
+        : rankWeights.location * 0.2;
+  const price =
+    intent.maxPrice === undefined
+      ? rankWeights.price * 0.55
+      : listing.price <= intent.maxPrice
+        ? rankWeights.price
+        : Math.max(0, rankWeights.price - (listing.price - intent.maxPrice) * 0.6);
+  const timing =
+    intent.timing === undefined
+      ? rankWeights.timing * 0.4
+      : listing.availability.includes(intent.timing)
+        ? rankWeights.timing
+        : rankWeights.timing * 0.2;
+  const trustRating =
+    ((listing.trustScore / 100) * 0.65 + (listing.rating / 5) * 0.35) *
+    rankWeights.trustRating;
 
-  if (intent.category === listing.category) {
-    score += 24;
-  } else if (intent.category === "General") {
-    score += 10;
-  }
+  const qualityBonus =
+    intent.qualityFocus === "Trust"
+      ? (listing.trustScore / 100) * 8
+      : intent.qualityFocus === "Budget"
+        ? Math.max(0, 8 - listing.price / 6)
+        : intent.qualityFocus === "Speed"
+          ? Math.max(0, 8 - responseTimeMinutes(listing.responseTime) / 2.5)
+          : 0;
+  const vibeBonus = intent.vibe && listing.vibe === intent.vibe ? 4 : 0;
 
-  if (intent.maxPrice) {
-    const priceDelta = Math.abs(listing.price - intent.maxPrice);
-    score += Math.max(0, 18 - priceDelta);
-  } else {
-    score += 10;
-  }
-
-  if (intent.location) {
-    score += listing.neighborhood === intent.location ? 17 : 4;
-  } else {
-    score += 8;
-  }
-
-  if (intent.timing) {
-    score += listing.availability.includes(intent.timing) ? 14 : 3;
-  }
-
-  if (intent.qualityFocus === "Trust") {
-    score += listing.trustScore / 10;
-  }
-
-  if (intent.qualityFocus === "Budget") {
-    score += Math.max(0, 10 - listing.price / 6);
-  }
-
-  if (intent.qualityFocus === "Speed") {
-    score += listing.responseTime.includes("3 min")
-      ? 10
-      : listing.responseTime.includes("5 min")
-        ? 8
-        : listing.responseTime.includes("8 min")
-          ? 6
-          : 4;
-  }
-
-  if (intent.vibe && listing.vibe === intent.vibe) {
-    score += 8;
-  }
-
-  score += listing.rating * 2;
-  score += listing.trustScore / 12;
-
-  return Math.round(score);
+  const score = Math.round(
+    category + location + price + timing + trustRating + qualityBonus + vibeBonus,
+  );
+  return {
+    score,
+    factors: {
+      category,
+      location,
+      price,
+      timing,
+      trustRating,
+      qualityBonus,
+      vibeBonus,
+    },
+  };
 }
 
-function buildReason(intent: SearchIntent, listing: RankedRecommendation) {
-  const reasons = [];
+function buildReason(
+  intent: SearchIntent,
+  listing: RankedRecommendation,
+  factors: ScoreBreakdown,
+) {
+  const reasonCandidates = [
+    {
+      key: "category",
+      score: factors.category,
+      text:
+        intent.category === listing.category
+          ? `Category fit for ${listing.category.toLowerCase()}`
+          : `Strong all-around campus service fit`,
+    },
+    {
+      key: "price",
+      score: factors.price,
+      text:
+        intent.maxPrice && listing.price <= intent.maxPrice
+          ? `Inside your budget at $${listing.price}`
+          : `Competitive campus pricing at $${listing.price}`,
+    },
+    {
+      key: "location",
+      score: factors.location,
+      text:
+        intent.location && listing.neighborhood === intent.location
+          ? `Right in ${listing.neighborhood}`
+          : `Viable location for UT pickup`,
+    },
+    {
+      key: "timing",
+      score: factors.timing,
+      text:
+        intent.timing && listing.availability.includes(intent.timing)
+          ? `Available ${intent.timing.toLowerCase()}`
+          : `Has near-term availability`,
+    },
+    {
+      key: "trustRating",
+      score: factors.trustRating,
+      text: `Strong trust profile (${listing.trustScore}) and ${listing.rating.toFixed(1)} rating`,
+    },
+  ].sort((left, right) => right.score - left.score);
 
-  if (intent.location && listing.neighborhood === intent.location) {
-    reasons.push(`Closest trusted option in ${listing.neighborhood}`);
+  if (factors.qualityBonus > 0 && intent.qualityFocus === "Speed") {
+    return `Fast replies (${listing.responseTime.toLowerCase()}) for quick booking`;
+  }
+  if (factors.qualityBonus > 0 && intent.qualityFocus === "Trust") {
+    return `Top trust emphasis with score ${listing.trustScore}`;
+  }
+  if (factors.qualityBonus > 0 && intent.qualityFocus === "Budget") {
+    return `Budget-leaning pick at $${listing.price}`;
+  }
+  if (factors.vibeBonus > 0 && intent.vibe) {
+    return `${intent.vibe} vibe match for your request`;
   }
 
-  if (intent.maxPrice && listing.price <= intent.maxPrice) {
-    reasons.push(`Inside your budget at $${listing.price}`);
-  }
-
-  if (intent.timing && listing.availability.includes(intent.timing)) {
-    reasons.push(`Actually available ${intent.timing.toLowerCase()}`);
-  }
-
-  if (listing.trustScore >= 92) {
-    reasons.push(`Strong trust score at ${listing.trustScore}`);
-  }
-
-  if (reasons.length === 0) {
-    reasons.push(`Top campus match for ${listing.category.toLowerCase()}`);
-  }
-
-  return reasons[0];
+  return reasonCandidates[0]?.text ?? `Strong UT service match`;
 }
 
 function toRanked(intent: SearchIntent) {
@@ -181,41 +284,92 @@ function toRanked(intent: SearchIntent) {
         matchScore: 0,
         reason: "",
       };
-      ranked.matchScore = scoreListing(intent, ranked);
-      ranked.reason = buildReason(intent, ranked);
-      return ranked;
+      const scored = scoreListing(intent, ranked);
+      ranked.matchScore = scored.score;
+      ranked.reason = buildReason(intent, ranked, scored.factors);
+      return {
+        ranked,
+        scored,
+      };
     })
-    .sort((left, right) => right.matchScore - left.matchScore);
+    .sort((left, right) => {
+      if (right.ranked.matchScore !== left.ranked.matchScore) {
+        return right.ranked.matchScore - left.ranked.matchScore;
+      }
+
+      const trustDelta = right.ranked.trustScore - left.ranked.trustScore;
+      if (trustDelta !== 0) return trustDelta;
+
+      const ratingDelta = right.ranked.rating - left.ranked.rating;
+      if (ratingDelta !== 0) return ratingDelta;
+
+      const responseDelta =
+        responseTimeMinutes(left.ranked.responseTime) -
+        responseTimeMinutes(right.ranked.responseTime);
+      if (responseDelta !== 0) return responseDelta;
+
+      return left.ranked.id.localeCompare(right.ranked.id);
+    })
+    .map(({ ranked }) => ranked);
 }
 
 export function refineRecommendations(
   recommendations: RankedRecommendation[],
   preference: SearchPreference,
 ) {
-  const adjusted = [...recommendations];
+  const adjusted = [...recommendations].sort((left, right) => {
+    if (preference === "Cheaper") {
+      if (left.price !== right.price) return left.price - right.price;
+      if (right.trustScore !== left.trustScore) return right.trustScore - left.trustScore;
+      return left.id.localeCompare(right.id);
+    }
 
-  adjusted.sort((left, right) => {
-    if (preference === "Cheaper") return left.price - right.price;
-    if (preference === "Closer") return left.neighborhood.localeCompare(right.neighborhood);
-    if (preference === "More Trusted") return right.trustScore - left.trustScore;
-    if (preference === "Available Sooner") return left.schedule[0].localeCompare(right.schedule[0]);
-    return left.vibe.localeCompare(right.vibe);
+    if (preference === "Closer") {
+      if (left.neighborhood !== right.neighborhood) {
+        return left.neighborhood.localeCompare(right.neighborhood);
+      }
+      if (right.matchScore !== left.matchScore) return right.matchScore - left.matchScore;
+      return left.id.localeCompare(right.id);
+    }
+
+    if (preference === "More Trusted") {
+      if (right.trustScore !== left.trustScore) return right.trustScore - left.trustScore;
+      if (right.rating !== left.rating) return right.rating - left.rating;
+      return left.id.localeCompare(right.id);
+    }
+
+    if (preference === "Available Sooner") {
+      const timeDelta = scheduleMinutes(left.schedule) - scheduleMinutes(right.schedule);
+      if (timeDelta !== 0) return timeDelta;
+      if (responseTimeMinutes(left.responseTime) !== responseTimeMinutes(right.responseTime)) {
+        return responseTimeMinutes(left.responseTime) - responseTimeMinutes(right.responseTime);
+      }
+      return left.id.localeCompare(right.id);
+    }
+
+    if (left.vibe !== right.vibe) return left.vibe.localeCompare(right.vibe);
+    if (left.price !== right.price) return left.price - right.price;
+    return left.id.localeCompare(right.id);
   });
 
-  return adjusted.map((listing, index) => ({
+  return adjusted.map((listing, index) => {
+    const reason =
+      preference === "Cheaper"
+        ? `Refined for lower price first ($${listing.price})`
+        : preference === "Closer"
+          ? `Refined for neighborhood convenience around ${listing.neighborhood}`
+          : preference === "More Trusted"
+            ? `Refined for stronger trust (${listing.trustScore}) and rating (${listing.rating.toFixed(1)})`
+            : preference === "Available Sooner"
+              ? `Refined for earlier open slots (${listing.schedule[0]})`
+              : `Refined for a different vibe (${listing.vibe.toLowerCase()})`;
+
+    return {
     ...listing,
     matchScore: Math.max(72, listing.matchScore - index),
-    reason:
-      preference === "Cheaper"
-        ? `Refined toward lower-priced options near ${listing.neighborhood}`
-        : preference === "Closer"
-          ? `Refined toward nearby matches around ${listing.neighborhood}`
-          : preference === "More Trusted"
-            ? `Refined toward providers with stronger trust and reviews`
-            : preference === "Available Sooner"
-              ? `Refined toward the earliest open slots`
-              : `Refined away from the previous vibe`,
-  }));
+    reason,
+  };
+  });
 }
 
 export function searchMarketplace(query: string): SearchResult {
