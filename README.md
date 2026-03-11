@@ -1,80 +1,86 @@
 # HornExchange AI
 
-UT-exclusive campus concierge prototype for student services at UT Austin.
+HornExchange is a UT-exclusive, services-only marketplace prototype that helps students find trusted student providers quickly through natural-language search and guided matching.
 
-Core v1 flow:
+One-sentence pitch:
 
-- Prompt-first natural-language search
-- Swipe recommendation deck (left skip, right save)
-- Saved shortlist with schedule selection
-- AI-assisted messaging openers/replies
+**HornExchange is a UT-only AI concierge for finding trusted student services through prompt-based search, recommendation matching, and low-friction messaging.**
+
+## What the Product Does
+
+HornExchange is designed around a campus services flow instead of a generic classifieds feed.
+
+Core journey:
+
+1. User enters a natural-language service need (for example, "cheap haircut near West Campus tonight").
+2. AI interprets intent and returns ranked provider recommendations.
+3. User browses recommendations and saves strong matches.
+4. User opens saved providers and sends a message with AI-assisted opener support.
+5. Seller can generate a polished listing draft from rough text.
+
+## Key Features
+
+- UT-only access gate (student-only marketplace intent)
+- Services-only scope (no product resale flow in v1)
+- Prompt-first search experience
+- AI interpretation + ranking explanations
+- Recommendation browsing and shortlist saves
+- Messaging flow with AI assist
 - Seller listing copilot
 
-## Local run
+## Run Locally (Quickstart)
+
+### 1) Clone and enter the project
+
+```bash
+git clone https://github.com/ShreyasRiddle/HornExchange.git
+cd HornExchange
+```
+
+If already cloned:
+
+```bash
+git pull origin main
+```
+
+### 2) Install dependencies
 
 ```bash
 npm install
+```
+
+### 3) Start development server
+
+```bash
 npm run dev
 ```
 
-App URL: `http://localhost:3000`
+Open: `http://localhost:3000`
 
-## API routes
-
-- `POST /api/ai/search` -> parse query + rank recommendations
-- `POST /api/ai/refine` -> rerank from refinement chip
-- `POST /api/ai/generate-listing` -> seller listing draft assist
-- `POST /api/ai/message-assist` -> buyer opener and seller reply suggestions
-
-Contract docs:
-
-- `docs/contracts/ai-api-contracts.md`
-- `docs/contracts/ut-verification.md`
-
-## Multi-agent workflow (Codex)
-
-One-command worktree setup:
+## Common Commands
 
 ```bash
-bash scripts/setup-agents.sh
+npm run lint
+npm run build
 ```
 
-This creates:
+## Full Local Setup + Troubleshooting
 
-- `worktrees/ui`
-- `worktrees/data`
-- `worktrees/ai`
-- `worktrees/qa`
-- `worktrees/demo`
+For detailed setup help and fixes for common errors (`npm` not found, `node` not found, `'next' is not recognized`, wrong directory, port conflicts), see:
 
-Open one Codex session per worktree and assign ownership by stream.
+- [docs/run-local.md](docs/run-local.md)
 
-Detailed instructions: `docs/agentic-workflow.md`
+## API Endpoints
 
-Device-specific master prompts:
+- `POST /api/ai/search`
+- `POST /api/ai/refine`
+- `POST /api/ai/generate-listing`
+- `POST /api/ai/message-assist`
 
-- Device 1 (Shreyas): `docs/master-prompt-device1.md`
-- Device 2 (Dhruv): `docs/master-prompt-device2.md`
+## Project Structure (Short)
 
-Orchestrator merge command:
-
-```bash
-bash scripts/merge-train.sh
-```
-
-## Custom skill
-
-Project skill: `skills/hornexchange-builder/SKILL.md`
-
-Use it in every stream to keep product scope, UX behavior, ranking logic, and demo acceptance consistent.
-
-## Supabase artifacts
-
-- Schema: `supabase/schema.sql`
-- Seed starter rows: `supabase/seed.sql`
-
-## QA and judging docs
-
-- Demo checklist: `docs/qa-checklist.md`
-- Codex judging narrative: `docs/judging-story.md`
-- Stream handoff log: `docs/handoff-notes.md`
+- `app/` - Next.js app routes and API routes
+- `components/` - UI components
+- `lib/` - ranking/search/assist logic and shared types
+- `supabase/` - schema and seed artifacts
+- `docs/` - run guide, QA, and judging docs
