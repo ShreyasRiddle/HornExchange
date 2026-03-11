@@ -12,13 +12,6 @@ Template:
 - Open issues:
 ```
 
-<<<<<<< HEAD
-## [agent-ai] 2026-03-10 21:10 CDT
-- Completed: Improved intent parsing coverage (budget/location/timing/quality cues), refactored deterministic weighted ranking + tie-break logic, aligned "why this match" reasons to actual scored factors, and upgraded listing/message assist draft quality while preserving API response shapes.
-- Contracts touched: Internal ranking/reasoning behavior in `lib/search.ts`; assist copy generation in `lib/listing-assist.ts` and `lib/message-assist.ts`. No API schema changes to `/api/ai/search`, `/api/ai/refine`, `/api/ai/generate-listing`, `/api/ai/message-assist`.
-- Assumptions: `refine` "Closer" preference remains a deterministic neighborhood-priority reorder without per-user geolocation; existing `SearchIntent` and endpoint response fields are contract-frozen.
-- Open issues: None.
-=======
 ## [codex-agent-data] 2026-03-10 21:12 CDT
 - Completed:
   - Finalized `supabase/schema.sql` constraints to align with app enums (category/neighborhood/availability/vibe), trust/rating bounds, and UT verification rule (`verified_ut` requires `@utexas.edu`).
@@ -36,4 +29,17 @@ Template:
   - Non-UT profiles may exist only in unverified onboarding states; marketplace-active identities remain UT-verified.
 - Blockers:
   - None.
->>>>>>> origin/main
+
+## [codex-agent-ui] 2026-03-10 22:02 CDT
+- Completed:
+  - Rebuilt `components/hornexchange-app.tsx` into a mobile-first two-screen UX: prompt-first Search screen and separate Chats screen.
+  - Implemented Tinder-style swipe deck interactions with gesture semantics: left=skip, right=save, up=expand details.
+  - Added dedicated route `app/chats/page.tsx` so Chats is accessible as a separate page while preserving in-app screen navigation.
+  - Added localStorage persistence for saved profiles, booking slot picks, DM threads, and active chat selection to keep demo flow stable across page changes.
+- Contracts touched:
+  - None. No changes to `app/api/ai/*`, `lib/search.ts`, or `lib/types.ts` payload structures.
+- Assumptions:
+  - "Separate Chats page" is satisfied by both dedicated route (`/chats`) and in-app tab navigation for quick mobile demo switching.
+  - Persisting shortlist/threads in localStorage is acceptable for demo-safe continuity without backend schema changes.
+- Blockers:
+  - None.
