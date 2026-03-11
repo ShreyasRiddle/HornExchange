@@ -18,5 +18,5 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json<AiSearchResponse>(searchMarketplace(query));
+  return NextResponse.json<AiSearchResponse>(await searchMarketplace(query));
 }

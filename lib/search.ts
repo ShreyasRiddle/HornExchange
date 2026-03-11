@@ -10,11 +10,54 @@ import { serviceListings } from "@/lib/seed-data";
 const categoryKeywords: Record<ServiceCategory, string[]> = {
   Haircuts: ["haircut", "barber", "fade", "trim", "cut"],
   Braiding: ["braid", "braids", "stylist", "formal", "hair"],
-  Tutoring: ["tutor", "calc", "calculus", "physics", "exam", "class"],
+  Tutoring: [
+    "study help",
+    "test prep",
+    "office hours",
+    "project help",
+    "homework",
+    "assignment",
+    "midterm",
+    "final",
+    "quiz",
+    "notes",
+    "study",
+    "tutor",
+    "calc",
+    "calculus",
+    "physics",
+    "exam",
+    "class",
+  ],
   Photography: ["photo", "headshot", "photography", "pictures", "grad"],
   "Resume Review": ["resume", "linkedin", "bullet", "internship", "career"],
   "Moving Help": ["move", "moving", "truck", "furniture", "pickup"],
 };
+
+const serviceIntentCategories = new Set<ServiceCategory>([
+  "Tutoring",
+  "Resume Review",
+  "Moving Help",
+]);
+
+const utilityIntentSignals = [
+  "study",
+  "help",
+  "homework",
+  "assignment",
+  "exam",
+  "midterm",
+  "final",
+  "quiz",
+  "project",
+  "resume",
+  "career",
+  "internship",
+  "move",
+  "moving",
+] as const;
+
+const stylingIntentSignals = ["hair", "haircut", "barber", "fade", "braid", "braids", "stylist"] as const;
 
 const neighborhoodAliases = [
   { canonical: "West Campus", keywords: ["west campus", "wc"] },
@@ -52,18 +95,145 @@ type ScoreBreakdown = {
   vibeBonus: number;
 };
 
-function parseCategory(query: string) {
+type IntentClassification = {
+  category: ServiceCategory | "General";
+  source: "ai" | "rules" | "fallback";
+  confidence?: number;
+};
+
+function parseCategoryByRules(query: string): IntentClassification {
   const lowered = query.toLowerCase();
+  let bestCategory: ServiceCategory | null = null;
+  let bestScore = 0;
   for (const [category, keywords] of Object.entries(categoryKeywords) as [
     ServiceCategory,
     string[],
   ][]) {
-    if (keywords.some((keyword) => lowered.includes(keyword))) {
-      return category;
+    const score = keywords.reduce((total, keyword) => {
+      if (!lowered.includes(keyword)) return total;
+      // Phrase matches are stronger signals than single words.
+      return total + (keyword.includes(" ") ? 4 : 1);
+    }, 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = category;
     }
   }
 
-  return "General" as const;
+  if (!bestCategory) {
+    return { category: "General", source: "fallback" };
+  }
+
+  return { category: bestCategory, source: "rules" };
+}
+
+async function classifyCategoryWithAI(query: string): Promise<IntentClassification | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 750);
+  const categories = [
+    "Haircuts",
+    "Braiding",
+    "Tutoring",
+    "Photography",
+    "Resume Review",
+    "Moving Help",
+    "General",
+  ].join(", ");
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_SEARCH_MODEL ?? "gpt-4.1-mini",
+        temperature: 0,
+        input: [
+          {
+            role: "system",
+            content:
+              "Classify a UT student marketplace query into one category. Return strict JSON with keys: category, confidence.",
+          },
+          {
+            role: "user",
+            content: `Categories: ${categories}\nQuery: ${query}`,
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "search_intent_classification",
+            schema: {
+              type: "object",
+              properties: {
+                category: {
+                  type: "string",
+                  enum: [
+                    "Haircuts",
+                    "Braiding",
+                    "Tutoring",
+                    "Photography",
+                    "Resume Review",
+                    "Moving Help",
+                    "General",
+                  ],
+                },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 1,
+                },
+              },
+              required: ["category", "confidence"],
+              additionalProperties: false,
+            },
+            strict: true,
+          },
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { output_text?: string };
+    if (!payload.output_text) return null;
+    const parsed = JSON.parse(payload.output_text) as {
+      category?: ServiceCategory | "General";
+      confidence?: number;
+    };
+    if (!parsed.category || typeof parsed.confidence !== "number") return null;
+
+    return {
+      category: parsed.category,
+      confidence: Math.max(0, Math.min(1, parsed.confidence)),
+      source: "ai",
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function classifyIntentCategory(query: string): Promise<IntentClassification> {
+  const aiClassification = await classifyCategoryWithAI(query);
+  if (aiClassification && aiClassification.confidence !== undefined && aiClassification.confidence >= 0.55) {
+    return aiClassification;
+  }
+  const rulesClassification = parseCategoryByRules(query);
+  if (aiClassification && rulesClassification.category === "General") {
+    return {
+      category: aiClassification.category,
+      confidence: aiClassification.confidence,
+      source: "fallback",
+    };
+  }
+  return rulesClassification;
 }
 
 function parseBudget(lowered: string) {
@@ -101,10 +271,35 @@ function responseTimeMinutes(responseTime: string) {
   return match ? Number(match[1]) : 30;
 }
 
-export function inferIntent(query: string): SearchIntent {
+function generalCategoryBoost(intent: SearchIntent, listing: RankedRecommendation) {
+  if (intent.category !== "General") return rankWeights.category * 0.35;
+  const lowered = intent.rawQuery.toLowerCase();
+  const hasUtilitySignal = utilityIntentSignals.some((signal) => lowered.includes(signal));
+  const hasStylingSignal = stylingIntentSignals.some((signal) => lowered.includes(signal));
+
+  if (hasUtilitySignal && serviceIntentCategories.has(listing.category)) {
+    return rankWeights.category * 0.62;
+  }
+  if (hasUtilitySignal) {
+    return rankWeights.category * 0.18;
+  }
+  if (hasStylingSignal && (listing.category === "Haircuts" || listing.category === "Braiding")) {
+    return rankWeights.category * 0.62;
+  }
+  if (hasStylingSignal) {
+    return rankWeights.category * 0.2;
+  }
+  if (serviceIntentCategories.has(listing.category)) {
+    return rankWeights.category * 0.5;
+  }
+  return rankWeights.category * 0.28;
+}
+
+export async function inferIntent(query: string): Promise<SearchIntent> {
   const lowered = query.toLowerCase();
   const maxPrice = parseBudget(lowered);
-  const category = parseCategory(query);
+  const classification = await classifyIntentCategory(query);
+  const category = classification.category;
   const location = parseLocation(lowered);
   const timing = timingMap.find(({ key }) => lowered.includes(key))?.value;
   const qualityFocus =
@@ -153,6 +348,8 @@ export function inferIntent(query: string): SearchIntent {
     qualityFocus,
     vibe,
     chips,
+    intentSource: classification.source,
+    classificationConfidence: classification.confidence,
   };
 }
 
@@ -162,7 +359,7 @@ function scoreListing(
 ): { score: number; factors: ScoreBreakdown } {
   const category =
     intent.category === "General"
-      ? rankWeights.category * 0.35
+      ? generalCategoryBoost(intent, listing)
       : intent.category === listing.category
         ? rankWeights.category
         : 0;
@@ -261,7 +458,16 @@ function buildReason(
   ].sort((left, right) => right.score - left.score);
 
   if (factors.qualityBonus > 0 && intent.qualityFocus === "Speed") {
-    return `Fast replies (${listing.responseTime.toLowerCase()}) for quick booking`;
+    const speedReasons = [
+      `${listing.responseTime} with near-term slots`,
+      `${listing.recentMomentum} and ${listing.responseTime.toLowerCase()}`,
+      `Quick scheduling with ${listing.schedule[0] ?? "open slots this week"}`,
+      `${listing.responseTime} and a ${listing.vibe.toLowerCase()} service style`,
+    ];
+    const speedIndex = Math.abs(
+      listing.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0),
+    ) % speedReasons.length;
+    return speedReasons[speedIndex];
   }
   if (factors.qualityBonus > 0 && intent.qualityFocus === "Trust") {
     return `Top trust emphasis with score ${listing.trustScore}`;
@@ -372,9 +578,17 @@ export function refineRecommendations(
   });
 }
 
-export function searchMarketplace(query: string): SearchResult {
-  const intent = inferIntent(query);
+export async function searchMarketplace(query: string): Promise<SearchResult> {
+  const intent = await inferIntent(query);
   const recommendations = toRanked(intent);
+
+  if (process.env.NODE_ENV !== "production") {
+    const confidence =
+      typeof intent.classificationConfidence === "number"
+        ? ` (${Math.round(intent.classificationConfidence * 100)}%)`
+        : "";
+    console.debug(`[search] intentSource=${intent.intentSource ?? "unknown"} category=${intent.category}${confidence}`);
+  }
 
   return {
     intent,

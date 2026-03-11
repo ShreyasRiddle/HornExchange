@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = searchMarketplace(query);
+  const result = await searchMarketplace(query);
 
   return NextResponse.json<AiRefineResponse>({
     ...result,

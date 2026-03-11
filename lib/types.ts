@@ -36,12 +36,15 @@ export type SearchIntent = {
   qualityFocus?: "Budget" | "Trust" | "Speed";
   vibe?: "Polished" | "Casual" | "Premium";
   chips: string[];
+  intentSource?: "ai" | "rules" | "fallback";
+  classificationConfidence?: number;
 };
 
 export type Review = {
   author: string;
   rating: number;
   quote: string;
+  avatarUrl?: string;
 };
 
 export type ServiceListing = {
@@ -50,12 +53,14 @@ export type ServiceListing = {
   serviceTitle: string;
   category: ServiceCategory;
   price: number;
+  priceUnit: string;
   neighborhood: Neighborhood;
   availability: AvailabilityWindow[];
   responseTime: string;
   bio: string;
   description: string;
   tags: string[];
+  photos: string[];
   trustScore: number;
   rating: number;
   reviewCount: number;
