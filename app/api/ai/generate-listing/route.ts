@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AiErrorResponse,
+  AiGenerateListingRequest,
+  AiGenerateListingResponse,
+  isNonEmptyString,
+} from "@/lib/api-contracts";
 import { generateListingDraft } from "@/lib/listing-assist";
 
 export async function POST(request: NextRequest) {
-  const { input } = (await request.json()) as { input?: string };
+  const body = (await request.json()) as Partial<AiGenerateListingRequest>;
+  const { input } = body;
 
-  if (!input?.trim()) {
+  if (!isNonEmptyString(input)) {
     return NextResponse.json(
-      { error: "Freeform seller input is required." },
+      { error: "Freeform seller input is required." } satisfies AiErrorResponse,
       { status: 400 },
     );
   }
 
-  return NextResponse.json(generateListingDraft(input));
+  return NextResponse.json<AiGenerateListingResponse>(generateListingDraft(input));
 }
